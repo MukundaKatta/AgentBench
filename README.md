@@ -5,9 +5,27 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-**Agent evaluation and benchmarking suite** — a Python framework for evaluating AI agent performance on tasks, measuring accuracy, efficiency, and tool usage.
+**Agent evaluation and benchmarking suite** for measuring how AI agents actually behave across tasks, tool use, and workflow reliability.
+
+AgentBench is a Python framework for evaluating more than one-shot outputs. It is built for scenarios where you want to understand whether an agent can complete tasks correctly, use tools effectively, and behave consistently enough to trust in real workflows.
 
 ---
+
+## Why AgentBench
+
+As agent systems become more capable, the hard part is no longer just generating plausible answers. The harder question is whether an agent can reliably complete work, recover from failure, and perform consistently across tasks that involve tools, steps, and state.
+
+AgentBench exists to make that evaluation more practical.
+
+## What It Measures
+
+AgentBench is designed to help measure:
+
+- task completion quality
+- tool-use correctness
+- efficiency and step usage
+- behavior consistency across runs
+- comparative performance across multiple agent implementations
 
 ## Architecture
 
@@ -109,6 +127,14 @@ print(comparison)
 - **Agent Comparison** — side-by-side evaluation of multiple agents on the same task suite
 - **Report Generation** — human-readable Markdown reports with summary statistics
 - **Flexible Export** — output results as JSON, CSV, or Markdown
+
+## Who This Is For
+
+- agent builders who want more grounded evals
+- teams comparing agent strategies or model providers
+- developers building internal benchmark workflows
+- researchers exploring practical agent reliability
+- anyone trying to move beyond anecdotal agent demos
 
 ## Development
 
