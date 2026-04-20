@@ -1,6 +1,6 @@
 """AgentBench — AI agent evaluation and benchmarking suite."""
 
-from agentbench.core import AgentBench, BenchmarkTask, EvalResult
+from agentbench.core import AgentBench, BenchmarkTask, EvalResult, RunArtifact
 from agentbench.config import BenchConfig
 from agentbench.utils import (
     calculate_accuracy,
@@ -14,6 +14,7 @@ __all__ = [
     "AgentBench",
     "BenchmarkTask",
     "EvalResult",
+    "RunArtifact",
     "BenchConfig",
     "calculate_accuracy",
     "calculate_efficiency_score",
