@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-import time
+import asyncio
+import inspect
+import json
 import logging
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, Field
@@ -66,6 +72,18 @@ class EvalResult(BaseModel):
         default_factory=dict,
         description="Additional metadata from the evaluation run",
     )
+
+
+class RunArtifact(BaseModel):
+    """Structured artifact bundle for one evaluation run."""
+
+    run_id: str
+    bench_name: str
+    created_at: str
+    tasks: list[dict[str, Any]]
+    results: list[dict[str, Any]]
+    summary: dict[str, Any]
+    leaderboard_entry: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +213,54 @@ class AgentBench:
 
         return results
 
+    async def run_evaluation_async(
+        self,
+        agent_fn: Callable[[BenchmarkTask], Any],
+        tasks: list[BenchmarkTask] | None = None,
+    ) -> list[EvalResult]:
+        """Run sync or async *agent_fn* on each task and collect results."""
+        target_tasks = tasks if tasks is not None else self.tasks
+        results: list[EvalResult] = []
+
+        for task in target_tasks:
+            start = time.perf_counter()
+            error: str | None = None
+            actual: Any = None
+            steps = 1
+            tool_calls: list[str] = []
+
+            try:
+                raw = agent_fn(task)
+                if inspect.isawaitable(raw):
+                    raw = await raw
+                if isinstance(raw, dict):
+                    actual = raw.get("answer", raw)
+                    steps = raw.get("steps", 1)
+                    tool_calls = raw.get("tool_calls", [])
+                else:
+                    actual = raw
+            except Exception as exc:  # noqa: BLE001
+                error = str(exc)
+                logger.warning("Task '%s' raised: %s", task.name, error)
+
+            elapsed = time.perf_counter() - start
+            eval_fn = task.evaluator or default_evaluator
+            correct = False if error else eval_fn(actual, task.expected)
+
+            result = EvalResult(
+                task_name=task.name,
+                expected=task.expected,
+                actual=actual,
+                correct=correct,
+                steps=steps,
+                duration_seconds=round(elapsed, 6),
+                error=error,
+                tool_calls=tool_calls,
+            )
+            results.append(result)
+
+        return results
+
     # ------------------------------------------------------------------
     # Scoring
     # ------------------------------------------------------------------
@@ -246,6 +312,19 @@ class AgentBench:
 
         return format_comparison_table(all_results, self.config.max_steps)
 
+    async def compare_agents_async(
+        self,
+        agent_fns: dict[str, Callable[[BenchmarkTask], Any]],
+        tasks: list[BenchmarkTask] | None = None,
+    ) -> str:
+        """Evaluate multiple sync or async agents and return a comparison table."""
+        all_results: dict[str, list[EvalResult]] = {}
+        for agent_name, fn in agent_fns.items():
+            logger.info("Evaluating agent '%s' ...", agent_name)
+            all_results[agent_name] = await self.run_evaluation_async(fn, tasks)
+
+        return format_comparison_table(all_results, self.config.max_steps)
+
     # ------------------------------------------------------------------
     # Reporting & export
     # ------------------------------------------------------------------
@@ -290,6 +369,63 @@ class AgentBench:
 
         lines.append("")
         return "\n".join(lines)
+
+    def build_run_artifact(
+        self,
+        results: list[EvalResult],
+        tasks: list[BenchmarkTask] | None = None,
+    ) -> RunArtifact:
+        """Build a structured artifact bundle for one benchmark run."""
+        run_id = uuid.uuid4().hex[:12]
+        created_at = datetime.now(timezone.utc).isoformat()
+        target_tasks = tasks if tasks is not None else self.tasks
+        accuracy = self.score_accuracy(results)
+        efficiency = self.score_efficiency(results)
+        total_time = sum(r.duration_seconds for r in results)
+        summary = {
+            "task_count": len(results),
+            "accuracy": accuracy,
+            "efficiency": efficiency,
+            "total_duration_seconds": round(total_time, 6),
+            "error_count": sum(1 for r in results if r.error),
+        }
+        leaderboard_entry = {
+            "run_id": run_id,
+            "bench_name": self.config.name,
+            "accuracy": accuracy,
+            "efficiency": efficiency,
+            "task_count": len(results),
+            "created_at": created_at,
+        }
+        return RunArtifact(
+            run_id=run_id,
+            bench_name=self.config.name,
+            created_at=created_at,
+            tasks=[task.model_dump() for task in target_tasks],
+            results=results_to_dicts(results),
+            summary=summary,
+            leaderboard_entry=leaderboard_entry,
+        )
+
+    def export_run_artifact(
+        self,
+        results: list[EvalResult],
+        path: str,
+        tasks: list[BenchmarkTask] | None = None,
+    ) -> RunArtifact:
+        """Write a run artifact bundle and leaderboard summary to disk."""
+        artifact = self.build_run_artifact(results, tasks)
+        target_dir = Path(path)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        bundle_path = target_dir / f"{artifact.run_id}.json"
+        leaderboard_path = target_dir / "leaderboard.jsonl"
+        bundle_path.write_text(
+            json.dumps(artifact.model_dump(), indent=2, default=str),
+            encoding="utf-8",
+        )
+        with leaderboard_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(artifact.leaderboard_entry) + "\n")
+        return artifact
 
     def export_results(
         self,

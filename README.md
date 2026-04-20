@@ -102,6 +102,23 @@ print(report)
 bench.export_results(results, format="json", path="results.json")
 ```
 
+### Async Agents
+
+```python
+import asyncio
+
+from agentbench import AgentBench, BenchmarkTask
+
+bench = AgentBench(name="async-eval")
+bench.register_task(name="capital-lookup", expected="Paris")
+
+async def async_agent(task: BenchmarkTask) -> str:
+    await asyncio.sleep(0)
+    return "Paris"
+
+results = asyncio.run(bench.run_evaluation_async(async_agent))
+```
+
 ### Comparing Multiple Agents
 
 ```python
@@ -118,6 +135,19 @@ comparison = bench.compare_agents(
 print(comparison)
 ```
 
+### Run Artifacts And Leaderboard Entries
+
+```python
+results = bench.run_evaluation(agent_fn=my_agent, tasks=bench.tasks)
+artifact = bench.export_run_artifact(results, path="artifacts")
+print(artifact.run_id)
+```
+
+That export writes:
+
+- one JSON bundle containing tasks, raw results, and summary metrics
+- one `leaderboard.jsonl` append-only file for lightweight cross-run comparison
+
 ## Features
 
 - **Task Registration** — define benchmark tasks with expected outputs and custom evaluators
@@ -127,6 +157,8 @@ print(comparison)
 - **Agent Comparison** — side-by-side evaluation of multiple agents on the same task suite
 - **Report Generation** — human-readable Markdown reports with summary statistics
 - **Flexible Export** — output results as JSON, CSV, or Markdown
+- **Async Support** — benchmark async agent callables without sync wrappers
+- **Run Artifacts** — persist benchmark bundles and leaderboard-ready summaries
 
 ## Who This Is For
 
